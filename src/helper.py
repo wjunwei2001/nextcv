@@ -117,15 +117,18 @@ def analyze_linkedin_profile(linkedin_url, career_path, country, industry, api_k
     client = OpenAI(api_key=api_key)
     
     prompt = f"""
-    You are an expert career coach. The user wants to find out how to develop their career. Analyze the following LinkedIn profile URL (carefully) and desired career path to provide career development advice. 
-    Think carefully about what kind of skills expertise the industry today actually need according to the desired career pathway.
-    Also think about whether the industry will play a big role/impact on the career type.
+    You are an expert career coach tasked to help the user with his budding career development and linkedin optimization. Your thinking should be thorough. You can think step by step before and after each action you decide to take.
+    The user, who is likely just starting out or is still studying right now, wants to find out how to develop their career. Analyze the following LinkedIn profile URL (carefully) and desired career path to provide career development advice. 
     
     LINKEDIN PROFILE URL:
     {linkedin_url}
     
     DESIRED CAREER PATH/SPECIALIZATION:
     {career_path + " in " + industry + " in " + country}
+
+    You mus have a comprehensive understanding about the career path and the industry.
+    Think carefully about what kind of skills expertise the industry today actually need according to the desired career pathway.
+    Also think about whether the industry will play a big role/impact on the career type.
     
     Provide a comprehensive analysis in JSON format with the following structure based on the profile, desired career path and the stage of career the user is at:
     1. Career Alignment: Evaluate how well the current profile aligns with the desired career path.
@@ -138,7 +141,7 @@ def analyze_linkedin_profile(linkedin_url, career_path, country, industry, api_k
         "career_alignment": {{
             "alignment_score": 0-100,
             "strengths": ["list of strengths that align with the desired path"],
-            "gaps": ["list of gaps or weaknesses for the desired path"]
+            "gaps": ["list of immediate gaps or weaknesses for the desired path"]
         }},
         "development_plan": {{
             "short_term_actions": ["list of immediate actions to take (0-6 months)"],
@@ -173,7 +176,7 @@ def analyze_linkedin_profile(linkedin_url, career_path, country, industry, api_k
             "skill_endorsements": ["skills to seek endorsements for"]
         }},
         "industry_insights": {{
-            "trends": ["relevant industry trends"],
+            "trends": ["relevant and up-to-date industry trends"],
             "certifications": ["valuable certifications"],
             "thought_leaders": ["people to follow"]
         }},
