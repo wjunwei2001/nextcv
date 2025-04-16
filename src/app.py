@@ -1,14 +1,8 @@
 import streamlit as st
-import PyPDF2
-import docx
-import os
-import io
-import json
 import pandas as pd
 import plotly.express as px
-import textwrap
 from openai import OpenAI
-import re
+from helper import extract_text_from_file, analyze_resume_with_openai, analyze_linkedin_profile
 
 # App setup
 st.set_page_config(
@@ -35,198 +29,10 @@ if 'api_key' not in st.session_state:
     st.session_state.api_key = ""
 if 'country' not in st.session_state:
     st.session_state.country = ""
+if 'industry' not in st.session_state:
+    st.session_state.industry = ""
 
-# Function to extract text from various file formats
-def extract_text_from_file(file):
-    text = ""
-    file_extension = os.path.splitext(file.name)[1].lower()
-    
-    if file_extension == '.pdf':
-        try:
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file.read()))
-            for page_num in range(len(pdf_reader.pages)):
-                text += pdf_reader.pages[page_num].extract_text()
-        except Exception as e:
-            st.error(f"Error extracting text from PDF: {e}")
-    elif file_extension in ['.docx', '.doc']:
-        try:
-            doc = docx.Document(io.BytesIO(file.read()))
-            for para in doc.paragraphs:
-                text += para.text + "\n"
-        except Exception as e:
-            st.error(f"Error extracting text from Word document: {e}")
-    elif file_extension == '.txt':
-        try:
-            text = file.read().decode('utf-8')
-        except Exception as e:
-            st.error(f"Error reading text file: {e}")
-    else:
-        st.error("Unsupported file format. Please upload a PDF, DOCX, or TXT file.")
-    
-    return text
 
-# Function to analyze resume using OpenAI
-def analyze_resume_with_openai(resume_text, job_description, api_key):
-    client = OpenAI(api_key=api_key)
-    
-    prompt = f"""
-    Analyze the following resume against the job description to provide detailed feedback. Think carefully from the perspective of someone who is hiring for the role.
-    Focus on ATS compatibility, skill match, content improvements, and learning opportunities.
-    
-    RESUME:
-    {resume_text}
-    
-    JOB DESCRIPTION:
-    {job_description}
-    
-    Provide a comprehensive analysis in JSON format with the following structure:
-    {{
-        "match_percentage": 0-100,
-        "ats_compatibility": {{
-            "score": 0-100,
-            "issues": ["list of ATS issues"],
-            "recommendations": ["list of recommendations to improve ATS compatibility"]
-        }},
-        "skill_match": {{
-            "matched_skills": ["list of matched skills"],
-            "missing_skills": ["list of missing skills"],
-            "recommended_skills": ["list of recommended skills to add"]
-        }},
-        "content_improvements": {{
-            "sections_to_improve": ["list of sections that need improvement"],
-            "wording_suggestions": ["list of wording improvements, be specific about this and give examples"],
-            "format_suggestions": ["list of formatting improvements, be specific about this and give examples"]
-        }},
-        "learning_opportunities": {{
-            "critical_skills_to_learn": ["list of critical skills to learn"],
-            "resources": [
-                {{
-                    "skill": "skill name",
-                    "resource_type": "course/book/certification/website",
-                    "resource_name": "specific resource name",
-                    "url": "resource url if applicable",
-                    "estimated_time": "estimated time to complete (weeks/months)"
-                }}
-            ],
-            "transferrable_skills": ["list of skills that are transferrable to other roles"]
-        }},
-        "summary": "brief summary of the overall analysis"
-    }}
-    
-    Be specific, actionable, and detailed in your analysis. Focus on providing genuine value to the job seeker.
-    """
-    
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", 
-                       "content": prompt}],
-            temperature=0.2,
-        )
-        result = response.choices[0].message.content
-        
-        # Extract the JSON part from the response
-        json_pattern = r'({[\s\S]*})'
-        json_match = re.search(json_pattern, result)
-        
-        if json_match:
-            json_data = json.loads(json_match.group(0))
-            return json_data
-        else:
-            st.error("Failed to parse the API response.")
-            return None
-            
-    except Exception as e:
-        st.error(f"Error communicating with OpenAI API: {e}")
-        return None
-    
-# Function to analyze LinkedIn profile
-def analyze_linkedin_profile(linkedin_url, career_path, country, api_key):
-    client = OpenAI(api_key=api_key)
-    
-    prompt = f"""
-    Analyze the following LinkedIn profile URL (carefully) and desired career path to provide career development advice. 
-    Think carefully about what kind of skills expertise the industry today actually need according to the desired career pathway.
-    Do 
-    
-    LINKEDIN PROFILE URL:
-    {linkedin_url}
-    
-    DESIRED CAREER PATH/SPECIALIZATION:
-    {career_path + " in " + country}
-    
-    Provide a comprehensive analysis in JSON format with the following structure:
-    {{
-        "career_alignment": {{
-            "alignment_score": 0-100,
-            "strengths": ["list of strengths that align with the desired path"],
-            "gaps": ["list of gaps or weaknesses for the desired path"]
-        }},
-        "development_plan": {{
-            "short_term_actions": ["list of immediate actions to take (0-6 months)"],
-            "medium_term_goals": ["list of medium-term goals (6-18 months)"],
-            "long_term_milestones": ["list of long-term career milestones (18+ months)"]
-        }},
-        "networking_strategy": {{
-            "key_connections": ["types of professionals to connect with"],
-            "communities": ["relevant professional communities to join"],
-            "engagement_tactics": ["strategies for meaningful networking"]
-        }},
-        "skill_development": {{
-            "technical_skills": [
-                {{
-                    "skill": "skill name",
-                    "priority": "high/medium/low",
-                    "resources": ["list of specific learning resources"]
-                }}
-            ],
-            "soft_skills": [
-                {{
-                    "skill": "skill name",
-                    "priority": "high/medium/low",
-                    "development_approaches": ["list of ways to develop this soft skill"]
-                }}
-            ]
-        }},
-        "profile_optimization": {{
-            "headline_suggestions": ["suggestions for LinkedIn headline"],
-            "about_section_tips": ["improvements for About section"],
-            "experience_highlighting": ["tips on highlighting relevant experience"],
-            "skill_endorsements": ["skills to seek endorsements for"]
-        }},
-        "industry_insights": {{
-            "trends": ["relevant industry trends"],
-            "certifications": ["valuable certifications"],
-            "thought_leaders": ["people to follow"]
-        }},
-        "summary": "brief summary of the overall career development advice"
-    }}
-    
-    Note: Focus on providing genuine value to the career seeker.
-    """
-    
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-        )
-        result = response.choices[0].message.content
-        
-        # Extract the JSON part from the response
-        json_pattern = r'({[\s\S]*})'
-        json_match = re.search(json_pattern, result)
-        
-        if json_match:
-            json_data = json.loads(json_match.group(0))
-            return json_data
-        else:
-            st.error("Failed to parse the API response.")
-            return None
-            
-    except Exception as e:
-        st.error(f"Error communicating with OpenAI API: {e}")
-        return None
 
 # Main app interface
 st.title("NextCV - Career Optimization Tool")
@@ -374,7 +180,7 @@ with tabs[1]:
     st.header("LinkedIn Career Path Analysis")
     st.write("Get personalized career development advice based on your LinkedIn profile and desired career path")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.session_state.linkedin_url = st.text_input("LinkedIn Profile URL", 
@@ -387,6 +193,31 @@ with tabs[1]:
     with col3:
         st.session_state.country = st.text_input("Country",
                                                  placeholder="e.g., Singapore, Sweden, USA, etc.")
+        
+    with col4:
+        industries = [
+            "Industry Agnostic",
+            "Technology & Software",
+            "Finance & Banking",
+            "Healthcare & Medical",
+            "Manufacturing & Engineering",
+            "Retail & E-commerce",
+            "Education & Training",
+            "Media & Entertainment",
+            "Real Estate & Construction",
+            "Energy & Utilities",
+            "Transportation & Logistics",
+            "Consulting & Professional Services",
+            "Hospitality & Tourism",
+            "Telecommunications",
+            "Government & Public Sector",
+            "Other (Please specify)"
+        ]
+        selected_industry = st.selectbox("Industry", industries)
+        if selected_industry == "Other (Please specify)":
+            st.session_state.industry = st.text_input("Specify your industry")
+        else:
+            st.session_state.industry = selected_industry
 
     # Analyze button for LinkedIn
     if st.button("Analyze Career Path", key="analyze_linkedin_button", use_container_width=True, 
@@ -403,6 +234,7 @@ with tabs[1]:
                     st.session_state.linkedin_url,
                     st.session_state.career_path,
                     st.session_state.country,
+                    st.session_state.industry,
                     st.session_state.api_key
                 )
     
