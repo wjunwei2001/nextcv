@@ -49,7 +49,7 @@ with tabs[0]:
 
     with col1:
         st.header("1. Upload Your Resume")
-        uploaded_file = st.file_uploader("", type=["pdf", "docx", "txt"])
+        uploaded_file = st.file_uploader("Upload your resume (PDF, DOCX, or TXT)*", type=["pdf", "docx", "txt"])
         
         if uploaded_file is not None:
             with st.spinner("Extracting text from your resume..."):
@@ -58,13 +58,18 @@ with tabs[0]:
                     st.success(f"Successfully extracted text from {uploaded_file.name}")
                     with st.expander("Preview Extracted Text"):
                         st.text_area("", value=st.session_state.resume_text, height=300)
+        else:
+            st.warning("Please upload your resume to proceed")
         
-        # New company field
-        st.session_state.company = st.text_input("Company Name (Optional)", placeholder="Enter the company you're applying to")
-
     with col2:
         st.header("2. Enter Job Description")
-        st.session_state.job_description = st.text_area("Paste Job Description", height=300)
+        st.session_state.company = st.text_input("Company Name", placeholder="Enter the company you're applying to")
+        st.session_state.job_description = st.text_area("Paste Job Description*", height=300, 
+                                                      placeholder="Enter the job description here...")
+        
+        if not st.session_state.job_description:
+            st.warning("Please enter a job description to proceed")
+            
 
     # Analyze button
     if st.button("Analyze", key="analyze_button", use_container_width=True, 
@@ -94,68 +99,40 @@ with tabs[0]:
         col1, col2 = st.columns([1, 3])
         with col1:
             st.metric("Match Percentage", f"{results['match_percentage']}%")
-            st.metric("ATS Compatibility", f"{results['ats_compatibility']['score']}%")
         
         with col2:
             st.subheader("Summary")
             st.write(results['summary'])
         
         # Tabs for detailed analysis
-        tab1, tab2, tab3, tab4 = st.tabs(["ATS Compatibility", "Skills Analysis", "Content Improvements", "Learning Opportunities"])
+        tab1, tab2, tab3, tab4 = st.tabs(["Skills Analysis", "Content Improvements", "Learning Opportunities", "Company Insights"])
         
         with tab1:
-            st.subheader("ATS Compatibility Issues")
-            if results['ats_compatibility']['issues']:
-                for issue in results['ats_compatibility']['issues']:
-                    st.warning(issue)
-            else:
-                st.success("No major ATS compatibility issues detected.")
-                
-            st.subheader("ATS Improvement Recommendations")
-            for rec in results['ats_compatibility']['recommendations']:
-                st.info(rec)
-        
-        with tab2:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.subheader("Matched Skills")
+            st.subheader("Your Matching Skills")
+            if results['skill_match']['matched_skills']:
+                st.success("These are the skills you already have that match the job requirements:")
                 for skill in results['skill_match']['matched_skills']:
-                    st.success(skill)
+                    st.markdown(f"✅ {skill}")
+            else:
+                st.warning("No matching skills found. Consider highlighting relevant skills from your experience.")
             
-            with col2:
-                st.subheader("Missing Skills")
+            st.subheader("Skills to Develop")
+            if results['skill_match']['missing_skills']:
+                st.error("These are the skills you need to develop for this role:")
                 for skill in results['skill_match']['missing_skills']:
-                    st.error(skill)
+                    st.markdown(f"⚠️ {skill}")
+            else:
+                st.success("Great! You have all the required skills for this role.")
             
             st.subheader("Recommended Skills to Add")
-            for skill in results['skill_match']['recommended_skills']:
-                st.info(skill)
-            
-            # Skills visualization
-            if results['skill_match']['matched_skills'] or results['skill_match']['missing_skills']:
-                skill_data = {
-                    'Skill': results['skill_match']['matched_skills'] + results['skill_match']['missing_skills'],
-                    'Status': ['Matched'] * len(results['skill_match']['matched_skills']) + 
-                            ['Missing'] * len(results['skill_match']['missing_skills']),
-                    'Count': [1] * (len(results['skill_match']['matched_skills']) + len(results['skill_match']['missing_skills']))
-                }
-                
-                df = pd.DataFrame(skill_data)
-                
-                fig = px.bar(
-                    df, 
-                    x='Skill', 
-                    y='Count',
-                    color='Status',
-                    color_discrete_map={'Matched': '#0068c9', 'Missing': '#ff4b4b'},
-                    title='Skills Match Analysis',
-                    height=400
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
+            if results['skill_match']['recommended_skills']:
+                st.info("These additional skills would make your profile even stronger:")
+                for skill in results['skill_match']['recommended_skills']:
+                    st.markdown(f"💡 {skill}")
+            else:
+                st.success("Your skill set is well-aligned with the role requirements.")
         
-        with tab3:
+        with tab2:
             st.subheader("Sections to Improve")
             for section in results['content_improvements']['sections_to_improve']:
                 st.warning(section)
@@ -168,7 +145,7 @@ with tabs[0]:
             for suggestion in results['content_improvements']['format_suggestions']:
                 st.info(suggestion)
         
-        with tab4:
+        with tab3:
             st.subheader("Critical Skills to Learn")
             for skill in results['learning_opportunities']['critical_skills_to_learn']:
                 st.error(skill)
@@ -181,6 +158,26 @@ with tabs[0]:
             st.subheader("Transferrable Skills")
             for skill in results['learning_opportunities']['transferrable_skills']:
                 st.success(skill)
+
+        with tab4:
+            if st.session_state.company:
+                st.subheader("Company-Specific Skills")
+                for skill in results['company_specific_insights']['company_specific_skills']:
+                    st.success(skill)
+                
+                st.subheader("Recommended Projects")
+                for project in results['company_specific_insights']['company_projects']:
+                    st.info(project)
+                
+                st.subheader("Networking Opportunities")
+                for opportunity in results['company_specific_insights']['networking_opportunities']:
+                    st.info(opportunity)
+                
+                st.subheader("Company Resources")
+                for resource in results['company_specific_insights']['company_resources']:
+                    st.info(resource)
+            else:
+                st.info("Enter a company name to get company-specific insights and recommendations.")
 
 with tabs[1]:
     st.header("LinkedIn Career Path Analysis")
