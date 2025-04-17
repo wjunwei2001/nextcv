@@ -1,8 +1,12 @@
+import os
+import dotenv
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from openai import OpenAI
 from helper import extract_text_from_file, analyze_resume_with_openai, analyze_linkedin_profile
+
+dotenv.load_dotenv()
 
 # App setup
 st.set_page_config(
@@ -39,7 +43,7 @@ if 'industry' not in st.session_state:
 # Main app interface
 st.title("NextCV - Career Optimization Tool")
 st.header("AI-Powered Resume and LinkedIn Analysis")
-st.write("Optimize your resume for ATS and identify skill gaps with AI-powered analysis")
+st.write("Optimize your resume for your job application and identify skill gaps with AI-powered analysis")
 
 tabs = st.tabs(["Resume Analysis", "LinkedIn Career Path Analysis"])
 
@@ -371,8 +375,9 @@ with tabs[1]:
                     st.info(leader)
 
 # OpenAI API Key in sidebar
-st.sidebar.header("Settings")
-st.session_state.api_key = st.sidebar.text_input("Enter your OpenAI API Key", type="password")
+# st.sidebar.header("Settings")
+# st.session_state.api_key = st.sidebar.text_input("Enter your OpenAI API Key", type="password")
+st.session_state.api_key = st.secrets["OPENAI_API_KEY"]
 
 # About section in sidebar
 st.sidebar.header("About")

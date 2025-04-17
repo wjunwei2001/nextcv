@@ -114,7 +114,7 @@ def analyze_resume_with_openai(resume_text, job_description, company, api_key):
         "content_improvements": {{
             "sections_to_improve": ["list of sections that need improvement"],
             "wording_suggestions": ["list of wording improvements, be specific about this and give examples"],
-            "format_suggestions": ["list of formatting improvements, be specific about this and give examples"]
+            "format_suggestions": ["list of formatting improvements, be specific about this and give examples. But don't need to mention the formatting errors that could be due to the PDF extraction."]
         }},
         "learning_opportunities": {{
             "critical_skills_to_learn": ["list of critical skills to learn"],
