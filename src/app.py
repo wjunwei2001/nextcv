@@ -1,12 +1,10 @@
 import os
-import dotenv
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from openai import OpenAI
 from helper import extract_text_from_file, analyze_resume_with_openai, analyze_linkedin_profile
 
-dotenv.load_dotenv()
 
 # App setup
 st.set_page_config(
