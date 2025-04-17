@@ -17,6 +17,8 @@ if 'resume_text' not in st.session_state:
     st.session_state.resume_text = ""
 if 'job_description' not in st.session_state:
     st.session_state.job_description = ""
+if 'company' not in st.session_state:
+    st.session_state.company = ""
 if 'linkedin_url' not in st.session_state:
     st.session_state.linkedin_url = ""
 if 'career_path' not in st.session_state:
@@ -56,6 +58,9 @@ with tabs[0]:
                     st.success(f"Successfully extracted text from {uploaded_file.name}")
                     with st.expander("Preview Extracted Text"):
                         st.text_area("", value=st.session_state.resume_text, height=300)
+        
+        # New company field
+        st.session_state.company = st.text_input("Company Name (Optional)", placeholder="Enter the company you're applying to")
 
     with col2:
         st.header("2. Enter Job Description")
@@ -75,6 +80,7 @@ with tabs[0]:
                 st.session_state.analysis_results = analyze_resume_with_openai(
                     st.session_state.resume_text, 
                     st.session_state.job_description,
+                    st.session_state.company,
                     st.session_state.api_key
                 )
 

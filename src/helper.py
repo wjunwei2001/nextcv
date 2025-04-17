@@ -38,18 +38,19 @@ def extract_text_from_file(file):
     return text
 
 # Function to analyze resume using OpenAI
-def analyze_resume_with_openai(resume_text, job_description, api_key):
+def analyze_resume_with_openai(resume_text, job_description, company, api_key):
     client = OpenAI(api_key=api_key)
     
     prompt = f"""
-    Analyze the following resume against the job description to provide detailed feedback. Think carefully from the perspective of someone who is hiring for the role.
-    Focus on ATS compatibility, skill match, content improvements, and learning opportunities.
+    You are acting as both an experienced technical recruiter and hiring manager for {company}. 
+    Analyze the following resume against the job description to provide detailed, strategic feedback.
+    Consider both automated ATS screening and human evaluation perspectives.
     
     RESUME:
     {resume_text}
     
     JOB DESCRIPTION:
-    {job_description}
+    {job_description + " in " + company}
     
     Provide a comprehensive analysis in JSON format with the following structure:
     {{
