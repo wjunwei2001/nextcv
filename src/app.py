@@ -3,9 +3,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from openai import OpenAI
-from helper import extract_text_from_file, analyze_resume_with_openai, analyze_linkedin_profile
+from helper import extract_text_from_file, create_cytoscape_html
+from llm_functions import analyze_resume_with_openai, analyze_linkedin_profile
 import networkx as nx
 import plotly.graph_objects as go
+import streamlit.components.v1 as components
+import json
 
 
 # App setup
@@ -42,10 +45,10 @@ if 'industry' not in st.session_state:
 
 # Main app interface
 st.title("NextCV - Career Optimization Tool")
-st.header("AI-Powered Resume and LinkedIn Analysis")
+st.header("AI-Powered Resume and Career Path Analysis")
 st.write("Optimize your resume for your job application and identify skill gaps with AI-powered analysis")
 
-tabs = st.tabs(["Resume Analysis", "LinkedIn Career Path Analysis"])
+tabs = st.tabs(["Resume Analysis", "Career Path Analysis"])
 
 with tabs[0]:
 
@@ -61,7 +64,7 @@ with tabs[0]:
                 if st.session_state.resume_text:
                     st.success(f"Successfully extracted text from {uploaded_file.name}")
                     with st.expander("Preview Extracted Text"):
-                        st.text_area("", value=st.session_state.resume_text, height=300)
+                        st.text_area("", value=st.session_state.resume_text, key='resumeAnalysis', height=300)
         else:
             st.warning("Please upload your resume to proceed")
         
@@ -130,19 +133,22 @@ with tabs[0]:
             
             st.subheader("Recommended Skills Development Path")
             if results['skill_match']['recommended_skills']:
-                nodes = []
-                edges = []
-                node_colors = []
-                node_sizes = []
-                node_texts = []
+                # Prepare data for Cytoscape
+                cyto_nodes = []
+                cyto_edges = []
+                prereq_map = {}  # To track existing prerequisites
                 
                 # Add root node
-                nodes.append("Desired Job")
-                node_colors.append('#6E7C7C')  # Dark teal for root
-                node_sizes.append(30)
-                node_texts.append("Start Here")
+                cyto_nodes.append({
+                    'data': {
+                        'id': 'desired-job',
+                        'label': 'Desired Job',
+                        'type': 'root',
+                        'info': ''
+                    }
+                })
                 
-                # Group skills by priority for better organization
+                # Group skills by priority
                 priority_groups = {
                     'high': [],
                     'medium': [],
@@ -152,106 +158,157 @@ with tabs[0]:
                 for skill_data in results['skill_match']['recommended_skills']:
                     priority_groups[skill_data['priority']].append(skill_data)
                 
-                # Color mapping
-                color_map = {
-                    'high': '#E63946',    # Red for high priority
-                    'medium': '#F9C74F',  # Yellow for medium priority
-                    'low': '#90BE6D',     # Green for low priority
-                    'prerequisite': '#43AA8B'  # Teal for prerequisites
-                }
-                
-                # Add skills by priority
+                # First pass: Add all main skill nodes
+                skill_nodes = {}  # Track skill nodes by their labels
                 for priority in ['high', 'medium', 'low']:
                     skills = priority_groups[priority]
                     if skills:
                         for skill_data in skills:
-                            # Add skill node
+                            skill_id = f"skill-{len(cyto_nodes)}"
                             skill = skill_data['skill']
-                            nodes.append(skill)
-                            edges.append(("Desired Job", skill))
-                            node_colors.append(color_map[priority])
-                            node_sizes.append(25)
                             
-                            # Create hover text
-                            hover_text = f"Priority: {priority.title()}<br>"
-                            hover_text += f"Category: {skill_data['category']}<br>"
-                            hover_text += f"Est. Time: {skill_data['estimated_time']}"
-                            node_texts.append(hover_text)
+                            # Add skill node
+                            cyto_nodes.append({
+                                'data': {
+                                    'id': skill_id,
+                                    'label': skill,
+                                    'type': priority,
+                                    'info': f"Priority: {priority.title()}\nCategory: {skill_data['category']}\nEst. Time: {skill_data['estimated_time']}"
+                                }
+                            })
+                            
+                            # Connect to root
+                            cyto_edges.append({
+                                'data': {
+                                    'source': 'desired-job',
+                                    'target': skill_id
+                                }
+                            })
+                            
+                            skill_nodes[skill] = skill_id
+                
+                # Second pass: Add prerequisites and connect them
+                for priority in ['high', 'medium', 'low']:
+                    skills = priority_groups[priority]
+                    if skills:
+                        for skill_data in skills:
+                            skill_id = skill_nodes[skill_data['skill']]
                             
                             # Add prerequisites if any
-                            for prereq in skill_data.get('prerequisites', []):
-                                if prereq not in nodes:
-                                    nodes.append(prereq)
-                                    node_colors.append(color_map['prerequisite'])
-                                    node_sizes.append(20)
-                                    node_texts.append(f"Prerequisite for: {skill}")
-                                edges.append((skill, prereq))
+                            if skill_data.get('prerequisites'):
+                                for prereq in skill_data['prerequisites']:
+                                    # Check if this prerequisite already exists
+                                    if prereq not in prereq_map:
+                                        prereq_id = f"prereq-{len(cyto_nodes)}"
+                                        prereq_map[prereq] = prereq_id
+                                        
+                                        # Add new prerequisite node
+                                        cyto_nodes.append({
+                                            'data': {
+                                                'id': prereq_id,
+                                                'label': prereq,
+                                                'type': 'prerequisite',
+                                                'info': f"Prerequisite for multiple skills"
+                                            }
+                                        })
+                                    else:
+                                        prereq_id = prereq_map[prereq]
+                                    
+                                    # Connect prerequisite to skill
+                                    cyto_edges.append({
+                                        'data': {
+                                            'source': skill_id,
+                                            'target': prereq_id
+                                        }
+                                    })
                 
-                # Create network graph
-                G = nx.Graph()
-                G.add_nodes_from(nodes)
-                G.add_edges_from(edges)
-                
-                # Use hierarchical layout
-                pos = nx.spring_layout(G, k=1, iterations=50)
-                
-                # Create Plotly figure
-                edge_trace = go.Scatter(
-                    x=[], y=[],
-                    line=dict(width=1, color='#888'),
-                    hoverinfo='none',
-                    mode='lines')
-                
-                # Add edges to trace
-                for edge in edges:
-                    x0, y0 = pos[edge[0]]
-                    x1, y1 = pos[edge[1]]
-                    edge_trace['x'] += (x0, x1, None)
-                    edge_trace['y'] += (y0, y1, None)
-                
-                # Create node trace
-                node_trace = go.Scatter(
-                    x=[], y=[],
-                    text=nodes,
-                    textposition="top center",
-                    textfont=dict(size=12),
-                    mode='markers+text',
-                    hovertext=node_texts,
-                    hoverinfo='text',
-                    marker=dict(
-                        showscale=False,
-                        color=node_colors,
-                        size=node_sizes,
-                        line=dict(width=2, color='white')
-                    )
-                )
-                
-                # Add nodes to trace
-                for node in nodes:
-                    x, y = pos[node]
-                    node_trace['x'] += (x,)
-                    node_trace['y'] += (y,)
-                
-                # Create the figure
-                fig = go.Figure(
-                    data=[edge_trace, node_trace],
-                    layout=go.Layout(
-                        showlegend=False,
-                        hovermode='closest',
-                        margin=dict(b=0, l=0, r=0, t=0),
-                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        height=600
-                    )
-                )
+                # Define Cytoscape styles
+                cyto_styles = [
+                    {
+                        'selector': 'node',
+                        'style': {
+                            'label': 'data(label)',
+                            'text-valign': 'center',
+                            'text-halign': 'center',
+                            'font-size': '12px',
+                            'width': '30px',
+                            'height': '30px',
+                            'padding': '5px'
+                        }
+                    },
+                    {
+                        'selector': 'edge',
+                        'style': {
+                            'width': 2,
+                            'curve-style': 'bezier',
+                            'target-arrow-shape': 'triangle',
+                            'line-color': '#888',
+                            'target-arrow-color': '#888',
+                            'opacity': 0.8
+                        }
+                    },
+                    {
+                        'selector': 'node[type="root"]',
+                        'style': {
+                            'background-color': '#6E7C7C',
+                            'font-weight': 'bold',
+                            'font-size': '16px'
+                        }
+                    },
+                    {
+                        'selector': 'node[type="high"]',
+                        'style': {
+                            'background-color': '#E63946',
+                        }
+                    },
+                    {
+                        'selector': 'node[type="medium"]',
+                        'style': {
+                            'background-color': '#F9C74F'
+                        }
+                    },
+                    {
+                        'selector': 'node[type="low"]',
+                        'style': {
+                            'background-color': '#90BE6D'
+                        }
+                    },
+                    {
+                        'selector': 'node[type="prerequisite"]',
+                        'style': {
+                            'background-color': '#43AA8B',
+                            'font-size': '12px',
+                        }
+                    },
+                    {
+                        'selector': '.highlighted',
+                        'style': {
+                            'border-width': '3px',
+                            'border-color': '#000',
+                            'border-opacity': 1,
+                            'z-index': 999
+                        }
+                    },
+                    {
+                        'selector': '.hover',
+                        'style': {
+                            'border-width': '2px',
+                            'border-color': '#fff',
+                            'border-opacity': 1,
+                            'z-index': 999
+                        }
+                    }
+                ]
                 
                 # Create columns for chart and legend
                 col1, col2 = st.columns([3, 1])
                 
                 with col1:
-                    st.plotly_chart(fig, use_container_width=True)
+                    # Render Cytoscape graph
+                    components.html(
+                        create_cytoscape_html(cyto_nodes, cyto_edges, cyto_styles),
+                        height=600,
+                    )
                 
                 with col2:
                     # Create a custom legend with color explanations
@@ -298,10 +355,11 @@ with tabs[0]:
                     st.markdown("### How to use")
                     st.markdown(
                         """
-                        - **Hover** over nodes for skill details
-                        - Lines show skill dependencies
-                        - Larger nodes are higher priority
-                        - Start with red nodes and work your way down
+                        - **Click** nodes to highlight them
+                        - **Hover** over nodes for details
+                        - **Drag** nodes to rearrange
+                        - **Scroll** to zoom in/out
+                        - Start with red nodes and work down
                         """
                     )
                 
@@ -382,24 +440,43 @@ with tabs[0]:
                 st.info("Enter a company name to get company-specific insights and recommendations.")
 
 with tabs[1]:
-    st.header("LinkedIn Career Path Analysis")
-    st.write("Get personalized career development advice based on your LinkedIn profile and desired career path")
+    st.header("Career Path Analysis")
+    st.write("Get personalized career development advice based on your LinkedIn profile, resume, and desired career path")
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2 = st.columns(2)
     
     with col1:
+        st.subheader("1. Upload Your Resume")
+        uploaded_file = st.file_uploader("Upload your resume (PDF, DOCX, or TXT)*", type=["pdf", "docx", "txt"], key="linkedin_resume")
+        
+        if uploaded_file is not None:
+            with st.spinner("Extracting text from your resume..."):
+                resume_text = extract_text_from_file(uploaded_file)
+                if resume_text:
+                    st.success(f"Successfully extracted text from {uploaded_file.name}")
+                    with st.expander("Preview Extracted Text"):
+                        st.text_area("", value=resume_text, height=300)
+        else:
+            st.warning("Please upload your resume to proceed")
+    
+    with col2:
+        st.subheader("2. Enter Career Details")
         st.session_state.linkedin_url = st.text_input("LinkedIn Profile URL", 
                                              placeholder="https://www.linkedin.com/in/yourprofile/")
     
-    with col2:
-        st.session_state.career_path = st.text_input("Desired Career Path/Specialization", 
-                                         placeholder="e.g., AI Development - ML Model Training, DevOps, Cloud Architecture, etc.")
+    col3, col4 = st.columns(2)
     
     with col3:
-        st.session_state.country = st.text_input("Country",
-                                                 placeholder="e.g., Singapore, Sweden, USA, etc.")
+        st.session_state.career_path = st.text_input("Desired Career Path/Specialization", 
+                                         placeholder="e.g., AI Development - ML Model Training, DevOps, Cloud Architecture, etc.")
         
     with col4:
+        st.session_state.country = st.text_input("Country",
+                                                 placeholder="e.g., Singapore, Sweden, USA, etc.")
+    
+    col5, col6 = st.columns(2)
+    
+    with col5:
         industries = [
             "Industry Agnostic",
             "Technology & Software",
@@ -426,20 +503,23 @@ with tabs[1]:
 
     # Analyze button for LinkedIn
     if st.button("Analyze Career Path", key="analyze_linkedin_button", use_container_width=True, 
-               disabled=not (st.session_state.linkedin_url and st.session_state.career_path and st.session_state.api_key)):
+               disabled=not (st.session_state.linkedin_url and st.session_state.career_path and st.session_state.api_key and resume_text)):
         if not st.session_state.api_key:
             st.error("Please enter your OpenAI API key in the sidebar.")
         elif not st.session_state.linkedin_url:
             st.error("Please enter your LinkedIn profile URL.")
         elif not st.session_state.career_path:
             st.error("Please specify your desired career path.")
+        elif not resume_text:
+            st.error("Please upload your resume.")
         else:
-            with st.spinner("Analyzing your LinkedIn profile and career path..."):
+            with st.spinner("Analyzing your LinkedIn profile, resume, and career path..."):
                 st.session_state.linkedin_analysis = analyze_linkedin_profile(
                     st.session_state.linkedin_url,
                     st.session_state.career_path,
                     st.session_state.country,
                     st.session_state.industry,
+                    resume_text,
                     st.session_state.api_key
                 )
     
@@ -459,9 +539,9 @@ with tabs[1]:
             st.write(results['summary'])
         
         # Tabs for detailed analysis
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        tab1, tab2, tab3, tab4 = st.tabs([
             "Career Alignment", 
-            "Development Plan", 
+            # "Development Plan", 
             "Skill Development", 
             "Profile Optimization",
             "Industry Insights"
@@ -498,31 +578,33 @@ with tabs[1]:
                 for tactic in results['networking_strategy']['engagement_tactics']:
                     st.info(tactic)
         
-        with tab2:
-            col1, col2, col3 = st.columns(3)
+        # with tab2:
+        #     col1, col2, col3 = st.columns(3)
             
-            with col1:
-                st.subheader("Short-Term Actions (0-6 months)")
-                for action in results['development_plan']['short_term_actions']:
-                    st.info(action)
+        #     with col1:
+        #         st.subheader("Short-Term Actions (0-6 months)")
+        #         for action in results['development_plan']['short_term_actions']:
+        #             st.info(action)
             
-            with col2:
-                st.subheader("Medium-Term Goals (6-18 months)")
-                for goal in results['development_plan']['medium_term_goals']:
-                    st.success(goal)
+        #     with col2:
+        #         st.subheader("Medium-Term Goals (6-18 months)")
+        #         for goal in results['development_plan']['medium_term_goals']:
+        #             st.success(goal)
             
-            with col3:
-                st.subheader("Long-Term Milestones (18+ months)")
-                for milestone in results['development_plan']['long_term_milestones']:
-                    st.success(milestone)
+        #     with col3:
+        #         st.subheader("Long-Term Milestones (18+ months)")
+        #         for milestone in results['development_plan']['long_term_milestones']:
+        #             st.success(milestone)
         
-        with tab3:
+        with tab2:
             col1, col2 = st.columns(2)
             
             with col1:
                 st.subheader("Technical Skills")
                 for skill in results['skill_development']['technical_skills']:
                     with st.expander(f"{skill['skill']} (Priority: {skill['priority'].upper()})"):
+                        st.write(f"**Current Level:** {skill['current_level']}")
+                        st.write(f"**Gap Analysis:** {skill['gap_analysis']}")
                         st.write("**Recommended Resources:**")
                         for resource in skill['resources']:
                             st.info(resource)
@@ -531,11 +613,13 @@ with tabs[1]:
                 st.subheader("Soft Skills")
                 for skill in results['skill_development']['soft_skills']:
                     with st.expander(f"{skill['skill']} (Priority: {skill['priority'].upper()})"):
+                        st.write(f"**Current Level:** {skill['current_level']}")
+                        st.write(f"**Gap Analysis:** {skill['gap_analysis']}")
                         st.write("**Development Approaches:**")
                         for approach in skill['development_approaches']:
                             st.info(approach)
         
-        with tab4:
+        with tab3:
             st.subheader("LinkedIn Profile Optimization")
             
             with st.expander("Headline Suggestions"):
@@ -549,12 +633,8 @@ with tabs[1]:
             with st.expander("Experience Highlighting"):
                 for tip in results['profile_optimization']['experience_highlighting']:
                     st.info(tip)
-            
-            with st.expander("Skill Endorsements"):
-                for skill in results['profile_optimization']['skill_endorsements']:
-                    st.info(skill)
         
-        with tab5:
+        with tab4:
             col1, col2, col3 = st.columns(3)
             
             with col1:
@@ -593,3 +673,4 @@ Your data is processed securely and is not stored after the session ends.
 st.divider()
 st.caption("Resume Analyzer - AI powered resume optimization tool")
 st.caption("Note: This tool uses AI to analyze your resume and job description. Results should be used as guidance and may not reflect all aspects of hiring processes.")
+

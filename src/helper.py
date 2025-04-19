@@ -71,195 +71,151 @@ def extract_text_from_file(file):
     text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
     
     return text
-
-# Function to analyze resume using OpenAI
-def analyze_resume_with_openai(resume_text, job_description, company, api_key):
-    client = OpenAI(api_key=api_key)
-
-    company_response = ""  # Initialize with empty string
-    if company != "":
-        company_prompt = f"""
-        Search up information about the company {company}. 
-        Given the context that the user is applying for a job at this company, give a summary about it."""
-
-        company_response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", 
-                       "content": company_prompt}],
-            temperature=0.2
-        )
     
-    prompt = f"""
-    You are acting as both an experienced technical recruiter and hiring manager for {company}. 
-    Analyze the following resume against the job description to provide detailed, strategic feedback.
-    Focus on providing actionable insights that will help the candidate stand out.
-    
-    RESUME (note that the resume is extracted from a PDF file, so the formatting might be off):
-    {resume_text}
-    
-    JOB DESCRIPTION:
-    {job_description + " in " + company}
 
-    Company Details:
-    {company_response}
-    
-    Provide a comprehensive analysis in JSON format with the following structure:
-    {{
-        "match_percentage": 0-100,
-        "skill_match": {{
-            "matched_skills": ["list of matched skills"],
-            "missing_skills": ["list of missing skills"],
-            "recommended_skills": [
-                {{
-                    "skill": "skill name",
-                    "category": "technical/soft/domain-specific",
-                    "priority": "high/medium/low",
-                    "prerequisites": ["list of prerequisite skills if any"],
-                    "estimated_time": "estimated time to learn (weeks/months)",
-                    "resources": ["list of specific learning resources"]
+def create_cytoscape_html(nodes, edges, styles):
+    return f"""
+    <html>
+        <head>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.21.1/cytoscape.min.js"></script>
+            <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+            <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+            <style>
+                .cy-container {{
+                    position: relative;
+                    width: 100%;
+                    height: 600px;
                 }}
-            ]
-        }},
-        "content_improvements": {{
-            "sections_to_improve": ["list of sections that need improvement"],
-            "wording_suggestions": ["list of wording improvements, be specific about this and give examples"],
-            "format_suggestions": ["list of formatting improvements, be specific about this and give examples. But don't need to mention the formatting errors that could be due to the PDF extraction."]
-        }},
-        "company_specific_insights": {{
-            "company_specific_skills": ["skills particularly valued by this company"],
-            "company_projects": ["suggestions for projects or experiences that would impress this company"],
-            "networking_opportunities": ["specific networking opportunities or events related to this company"],
-            "company_resources": ["company-specific resources or programs the candidate could leverage"]
-        }},
-        "summary": "brief summary of the overall analysis"
-    }}
-    
-    For the recommended_skills, organize them in a logical learning path with clear prerequisites and priorities.
-    High priority skills should be those that are most critical for the role and can be learned relatively quickly.
-    Medium priority skills are important but can be developed over time.
-    Low priority skills are nice-to-have or more advanced skills.
-    
-    Be specific, actionable, and detailed in your analysis. Focus on providing genuine value to the job seeker.
-    If a company is provided, emphasize company-specific insights and how the candidate can better position themselves for this particular role.
+                #cy {{
+                    width: 100%;
+                    height: 100%;
+                    display: block;
+                    border: 1px solid #ccc;
+                    border-radius: 5px;
+                    position: absolute;
+                }}
+                .control-button {{
+                    padding: 8px 16px;
+                    margin: 5px;
+                    border-radius: 4px;
+                    border: 1px solid #ccc;
+                    background-color: rgba(255, 255, 255, 0.9);
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: background-color 0.2s;
+                }}
+                .control-button:hover {{
+                    background-color: rgba(240, 240, 240, 0.9);
+                }}
+                #controls {{
+                    position: absolute;
+                    top: 10px;
+                    right: 10px;
+                    display: flex;
+                    gap: 10px;
+                    z-index: 999;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="cy-container">
+                <div id="cy"></div>
+                <div id="controls">
+                    <button id="resetLayout" class="control-button">Reset Layout</button>
+                </div>
+            </div>
+            <script>
+                // Register the dagre layout
+                cytoscape.use(cytoscapeDagre);
+                
+                var cy = cytoscape({{
+                    container: document.getElementById('cy'),
+                    elements: {{
+                        nodes: {json.dumps(nodes)},
+                        edges: {json.dumps(edges)}
+                    }},
+                    style: {json.dumps(styles)},
+                    layout: {{
+                        name: 'dagre',
+                        rankDir: 'TB',
+                        ranker: 'network-simplex',
+                        nodeDimensionsIncludeLabels: true,
+                        spacingFactor: 1,
+                        edgeSep: 40,
+                        rankSep: 90,
+                        animate: true,
+                        animationDuration: 500,
+                        fit: true,
+                        padding: 50
+                    }},
+                    wheelSensitivity: 0.2  // Reduce scroll zoom sensitivity
+                }});
+                
+                // Add interactivity
+                cy.on('tap', 'node', function(evt){{
+                    var node = evt.target;
+                    cy.elements().removeClass('highlighted');
+                    node.addClass('highlighted');
+                    node.neighborhood().addClass('highlighted');
+                }});
+                
+                cy.on('mouseover', 'node', function(evt){{
+                    var node = evt.target;
+                    node.addClass('hover');
+                    
+                    // Show tooltip with node info
+                    var info = node.data('info');
+                    if (info) {{
+                        var tooltip = document.createElement('div');
+                        tooltip.className = 'tooltip';
+                        tooltip.innerHTML = info;
+                        tooltip.style.position = 'absolute';
+                        tooltip.style.left = evt.renderedPosition.x + 'px';
+                        tooltip.style.top = (evt.renderedPosition.y - 10) + 'px';
+                        tooltip.style.background = 'rgba(0,0,0,0.8)';
+                        tooltip.style.color = 'white';
+                        tooltip.style.padding = '5px 10px';
+                        tooltip.style.borderRadius = '3px';
+                        tooltip.style.fontSize = '14px';
+                        tooltip.style.zIndex = 1000;
+                        document.body.appendChild(tooltip);
+                        node.data('tooltip', tooltip);
+                    }}
+                }});
+                
+                cy.on('mouseout', 'node', function(evt){{
+                    var node = evt.target;
+                    node.removeClass('hover');
+                    
+                    // Remove tooltip
+                    var tooltip = node.data('tooltip');
+                    if (tooltip) {{
+                        tooltip.remove();
+                        node.removeData('tooltip');
+                    }}
+                }});
+                
+                // Center the graph
+                cy.fit();
+                cy.center();
+                
+                // Add button functionality
+                document.getElementById('resetLayout').addEventListener('click', function() {{
+                    cy.layout({{
+                        name: 'dagre',
+                        rankDir: 'TB',
+                        ranker: 'network-simplex',
+                        nodeDimensionsIncludeLabels: true,
+                        spacingFactor: 1,
+                        edgeSep: 40,
+                        rankSep: 90,
+                        animate: true,
+                        animationDuration: 500,
+                        fit: true,
+                        padding: 50
+                    }}).run();
+                }});
+            </script>
+        </body>
+    </html>
     """
-    
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", 
-                       "content": prompt}],
-            temperature=0.2,
-        )
-        result = response.choices[0].message.content
-        
-        # Extract the JSON part from the response
-        json_pattern = r'({[\s\S]*})'
-        json_match = re.search(json_pattern, result)
-        
-        if json_match:
-            json_data = json.loads(json_match.group(0))
-            return json_data
-        else:
-            st.error("Failed to parse the API response.")
-            return None
-            
-    except Exception as e:
-        st.error(f"Error communicating with OpenAI API: {e}")
-        return None
-    
-# Function to analyze LinkedIn profile
-def analyze_linkedin_profile(linkedin_url, career_path, country, industry, api_key):
-    client = OpenAI(api_key=api_key)
-    
-    prompt = f"""
-    You are an expert career coach tasked to help the user with his budding career development and linkedin optimization. Your thinking should be thorough. You can think step by step before and after each action you decide to take.
-    The user, who is likely just starting out or is still studying right now, wants to find out how to develop their career. Analyze the following LinkedIn profile URL (carefully) and desired career path to provide career development advice. 
-    
-    LINKEDIN PROFILE URL:
-    {linkedin_url}
-    
-    DESIRED CAREER PATH/SPECIALIZATION:
-    {career_path + " in " + industry + " in " + country}
-
-    You mus have a comprehensive understanding about the career path and the industry.
-    Think carefully about what kind of skills expertise the industry today actually need according to the desired career pathway.
-    Also think about whether the industry will play a big role/impact on the career type.
-    
-    Provide a comprehensive analysis in JSON format with the following structure based on the profile, desired career path and the stage of career the user is at:
-    1. Career Alignment: Evaluate how well the current profile aligns with the desired career path.
-    2. Development Plan: Suggest a detailed plan for skill development and career progression. Do not repeat the same skills that are already in the profile if they are sufficiently developed.
-    3. Networking Strategy: Recommend networking strategies and key connections to make.
-    4. Skill Development: Identify key technical and soft skills to focus on.
-    5. Profile Optimization: Provide concrete tips for optimizing the LinkedIn profile.
-    6. Industry Insights: Share deep insights about the industry, including trends and certifications.
-    {{
-        "career_alignment": {{
-            "alignment_score": 0-100,
-            "strengths": ["list of strengths that align with the desired path"],
-            "gaps": ["list of immediate gaps or weaknesses for the desired path"]
-        }},
-        "development_plan": {{
-            "short_term_actions": ["list of immediate actions to take (0-6 months)"],
-            "medium_term_goals": ["list of medium-term goals (6-18 months)"],
-            "long_term_milestones": ["list of long-term career milestones (18+ months)"]
-        }},
-        "networking_strategy": {{
-            "key_connections": ["types of professionals to connect with"],
-            "communities": ["relevant professional communities to join"],
-            "engagement_tactics": ["strategies for meaningful networking"]
-        }},
-        "skill_development": {{
-            "technical_skills": [
-                {{
-                    "skill": "skill name",
-                    "priority": "high/medium/low",
-                    "resources": ["list of specific learning resources"]
-                }}
-            ],
-            "soft_skills": [
-                {{
-                    "skill": "skill name",
-                    "priority": "high/medium/low",
-                    "development_approaches": ["list of ways to develop this soft skill"]
-                }}
-            ]
-        }},
-        "profile_optimization": {{
-            "headline_suggestions": ["suggestions for LinkedIn headline based on the profile"],
-            "about_section_tips": ["improvements for About section"],
-            "experience_highlighting": ["tips on highlighting relevant experience"],
-            "skill_endorsements": ["skills to seek endorsements for"]
-        }},
-        "industry_insights": {{
-            "trends": ["relevant and up-to-date industry trends"],
-            "certifications": ["valuable certifications"],
-            "thought_leaders": ["people to follow"]
-        }},
-        "summary": "brief summary of the overall career development advice based on the profile, desired career path and the stage of career the user is at"
-    }}
-    
-    Note: Focus on providing genuine value to the career seeker.
-    """
-    
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-        )
-        result = response.choices[0].message.content
-        
-        # Extract the JSON part from the response
-        json_pattern = r'({[\s\S]*})'
-        json_match = re.search(json_pattern, result)
-        
-        if json_match:
-            json_data = json.loads(json_match.group(0))
-            return json_data
-        else:
-            st.error("Failed to parse the API response.")
-            return None
-            
-    except Exception as e:
-        st.error(f"Error communicating with OpenAI API: {e}")
-        return None
