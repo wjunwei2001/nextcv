@@ -109,7 +109,16 @@ def analyze_resume_with_openai(resume_text, job_description, company, api_key):
         "skill_match": {{
             "matched_skills": ["list of matched skills"],
             "missing_skills": ["list of missing skills"],
-            "recommended_skills": ["list of recommended skills to add"]
+            "recommended_skills": [
+                {{
+                    "skill": "skill name",
+                    "category": "technical/soft/domain-specific",
+                    "priority": "high/medium/low",
+                    "prerequisites": ["list of prerequisite skills if any"],
+                    "estimated_time": "estimated time to learn (weeks/months)",
+                    "resources": ["list of specific learning resources"]
+                }}
+            ]
         }},
         "content_improvements": {{
             "sections_to_improve": ["list of sections that need improvement"],
@@ -137,6 +146,11 @@ def analyze_resume_with_openai(resume_text, job_description, company, api_key):
         }},
         "summary": "brief summary of the overall analysis"
     }}
+    
+    For the recommended_skills, organize them in a logical learning path with clear prerequisites and priorities.
+    High priority skills should be those that are most critical for the role and can be learned relatively quickly.
+    Medium priority skills are important but can be developed over time.
+    Low priority skills are nice-to-have or more advanced skills.
     
     Be specific, actionable, and detailed in your analysis. Focus on providing genuine value to the job seeker.
     If a company is provided, emphasize company-specific insights and how the candidate can better position themselves for this particular role.

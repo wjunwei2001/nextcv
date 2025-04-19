@@ -4,6 +4,8 @@ import pandas as pd
 import plotly.express as px
 from openai import OpenAI
 from helper import extract_text_from_file, analyze_resume_with_openai, analyze_linkedin_profile
+import networkx as nx
+import plotly.graph_objects as go
 
 
 # App setup
@@ -107,7 +109,7 @@ with tabs[0]:
             st.write(results['summary'])
         
         # Tabs for detailed analysis
-        tab1, tab2, tab3, tab4 = st.tabs(["Skills Analysis", "Content Improvements", "Learning Opportunities", "Company Insights"])
+        tab1, tab2, tab3 = st.tabs(["Skills Analysis", "Content Improvements", "Company Insights"])
         
         with tab1:
             st.subheader("Your Matching Skills")
@@ -126,11 +128,223 @@ with tabs[0]:
             else:
                 st.success("Great! You have all the required skills for this role.")
             
-            st.subheader("Recommended Skills to Add")
+            st.subheader("Recommended Skills Development Path")
             if results['skill_match']['recommended_skills']:
-                st.info("These additional skills would make your profile even stronger:")
-                for skill in results['skill_match']['recommended_skills']:
-                    st.markdown(f"💡 {skill}")
+                nodes = []
+                edges = []
+                node_colors = []
+                node_sizes = []
+                node_texts = []
+                
+                # Add root node
+                nodes.append("Desired Job")
+                node_colors.append('#6E7C7C')  # Dark teal for root
+                node_sizes.append(30)
+                node_texts.append("Start Here")
+                
+                # Group skills by priority for better organization
+                priority_groups = {
+                    'high': [],
+                    'medium': [],
+                    'low': []
+                }
+                
+                for skill_data in results['skill_match']['recommended_skills']:
+                    priority_groups[skill_data['priority']].append(skill_data)
+                
+                # Color mapping
+                color_map = {
+                    'high': '#E63946',    # Red for high priority
+                    'medium': '#F9C74F',  # Yellow for medium priority
+                    'low': '#90BE6D',     # Green for low priority
+                    'prerequisite': '#43AA8B'  # Teal for prerequisites
+                }
+                
+                # Add skills by priority
+                for priority in ['high', 'medium', 'low']:
+                    skills = priority_groups[priority]
+                    if skills:
+                        for skill_data in skills:
+                            # Add skill node
+                            skill = skill_data['skill']
+                            nodes.append(skill)
+                            edges.append(("Desired Job", skill))
+                            node_colors.append(color_map[priority])
+                            node_sizes.append(25)
+                            
+                            # Create hover text
+                            hover_text = f"Priority: {priority.title()}<br>"
+                            hover_text += f"Category: {skill_data['category']}<br>"
+                            hover_text += f"Est. Time: {skill_data['estimated_time']}"
+                            node_texts.append(hover_text)
+                            
+                            # Add prerequisites if any
+                            for prereq in skill_data.get('prerequisites', []):
+                                if prereq not in nodes:
+                                    nodes.append(prereq)
+                                    node_colors.append(color_map['prerequisite'])
+                                    node_sizes.append(20)
+                                    node_texts.append(f"Prerequisite for: {skill}")
+                                edges.append((skill, prereq))
+                
+                # Create network graph
+                G = nx.Graph()
+                G.add_nodes_from(nodes)
+                G.add_edges_from(edges)
+                
+                # Use hierarchical layout
+                pos = nx.spring_layout(G, k=1, iterations=50)
+                
+                # Create Plotly figure
+                edge_trace = go.Scatter(
+                    x=[], y=[],
+                    line=dict(width=1, color='#888'),
+                    hoverinfo='none',
+                    mode='lines')
+                
+                # Add edges to trace
+                for edge in edges:
+                    x0, y0 = pos[edge[0]]
+                    x1, y1 = pos[edge[1]]
+                    edge_trace['x'] += (x0, x1, None)
+                    edge_trace['y'] += (y0, y1, None)
+                
+                # Create node trace
+                node_trace = go.Scatter(
+                    x=[], y=[],
+                    text=nodes,
+                    textposition="top center",
+                    textfont=dict(size=12),
+                    mode='markers+text',
+                    hovertext=node_texts,
+                    hoverinfo='text',
+                    marker=dict(
+                        showscale=False,
+                        color=node_colors,
+                        size=node_sizes,
+                        line=dict(width=2, color='white')
+                    )
+                )
+                
+                # Add nodes to trace
+                for node in nodes:
+                    x, y = pos[node]
+                    node_trace['x'] += (x,)
+                    node_trace['y'] += (y,)
+                
+                # Create the figure
+                fig = go.Figure(
+                    data=[edge_trace, node_trace],
+                    layout=go.Layout(
+                        showlegend=False,
+                        hovermode='closest',
+                        margin=dict(b=0, l=0, r=0, t=0),
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        height=600
+                    )
+                )
+                
+                # Create columns for chart and legend
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    # Create a custom legend with color explanations
+                    st.markdown("### Priority Legend")
+                    st.markdown(
+                        """
+                        <style>
+                        .priority-box {
+                            display: inline-block;
+                            width: 15px;
+                            height: 15px;
+                            margin-right: 8px;
+                            vertical-align: middle;
+                            border-radius: 50%;
+                        }
+                        .priority-text {
+                            vertical-align: middle;
+                            font-size: 16px;
+                        }
+                        </style>
+                        """, 
+                        unsafe_allow_html=True
+                    )
+                    
+                    priorities = [
+                        {"name": "High Priority", "color": "#E63946", "description": "Learn these skills first"},
+                        {"name": "Medium Priority", "color": "#F9C74F", "description": "Focus on these next"},
+                        {"name": "Low Priority", "color": "#90BE6D", "description": "Nice to have skills"},
+                        {"name": "Prerequisites", "color": "#43AA8B", "description": "Required foundation"}
+                    ]
+                    
+                    for p in priorities:
+                        st.markdown(
+                            f"""
+                            <div>
+                                <span class="priority-box" style="background-color: {p['color']};"></span>
+                                <span class="priority-text"><b>{p['name']}</b></span>
+                            </div>
+                            <div style="margin-left: 23px; margin-bottom: 10px; font-size: 14px;">{p['description']}</div>
+                            """, 
+                            unsafe_allow_html=True
+                        )
+                    
+                    st.markdown("### How to use")
+                    st.markdown(
+                        """
+                        - **Hover** over nodes for skill details
+                        - Lines show skill dependencies
+                        - Larger nodes are higher priority
+                        - Start with red nodes and work your way down
+                        """
+                    )
+                
+                # Interactive Skills Explorer
+                st.subheader("Skills Explorer")
+                
+                filtered_skills = [
+                    skill for skill in results['skill_match']['recommended_skills'] 
+                ]
+                
+                # Display filtered skills in an expandable format
+                if filtered_skills:
+                    for skill_data in filtered_skills:
+                        priority_color = {
+                            "high": "#E63946",
+                            "medium": "#F9C74F", 
+                            "low": "#90BE6D"
+                        }.get(skill_data['priority'], "#43AA8B")
+                        
+                        with st.expander(f"📊 {skill_data['skill']} ({skill_data['priority'].title()} Priority)"):
+                            col1, col2 = st.columns([1, 2])
+                            
+                            with col1:
+                                st.markdown(f"**Category:** {skill_data['category']}")
+                                st.markdown(f"**Est. Time:** {skill_data['estimated_time']}")
+                                
+                                if skill_data.get('prerequisites'):
+                                    st.markdown("**Prerequisites:**")
+                                    for prereq in skill_data['prerequisites']:
+                                        st.markdown(f"- {prereq}")
+                            
+                            with col2:
+                                if skill_data.get('resources'):
+                                    st.markdown("**Learning Resources:**")
+                                    for i, resource in enumerate(skill_data['resources']):
+                                        st.markdown(f"{i+1}. {resource}")
+                                
+                                # Add a progress tracking placeholder (in a real app, this could be interactive)
+                                st.progress(0)
+                                st.caption("Track your progress learning this skill")
+                else:
+                    st.info("No skills match your selected priority filters.")
+
             else:
                 st.success("Your skill set is well-aligned with the role requirements.")
         
@@ -148,20 +362,6 @@ with tabs[0]:
                 st.info(suggestion)
         
         with tab3:
-            st.subheader("Critical Skills to Learn")
-            for skill in results['learning_opportunities']['critical_skills_to_learn']:
-                st.error(skill)
-            
-            st.subheader("Learning Resources")
-            if results['learning_opportunities']['resources']:
-                resources_df = pd.DataFrame(results['learning_opportunities']['resources'])
-                st.dataframe(resources_df, use_container_width=True, hide_index=True)
-            
-            st.subheader("Transferrable Skills")
-            for skill in results['learning_opportunities']['transferrable_skills']:
-                st.success(skill)
-
-        with tab4:
             if st.session_state.company:
                 st.subheader("Company-Specific Skills")
                 for skill in results['company_specific_insights']['company_specific_skills']:
