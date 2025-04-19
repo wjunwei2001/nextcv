@@ -125,19 +125,6 @@ def analyze_resume_with_openai(resume_text, job_description, company, api_key):
             "wording_suggestions": ["list of wording improvements, be specific about this and give examples"],
             "format_suggestions": ["list of formatting improvements, be specific about this and give examples. But don't need to mention the formatting errors that could be due to the PDF extraction."]
         }},
-        "learning_opportunities": {{
-            "critical_skills_to_learn": ["list of critical skills to learn"],
-            "resources": [
-                {{
-                    "skill": "skill name",
-                    "resource_type": "course/book/certification/website",
-                    "resource_name": "specific resource name",
-                    "url": "resource url if applicable",
-                    "estimated_time": "estimated time to complete (weeks/months)"
-                }}
-            ],
-            "transferrable_skills": ["list of skills that are transferrable to other roles"]
-        }},
         "company_specific_insights": {{
             "company_specific_skills": ["skills particularly valued by this company"],
             "company_projects": ["suggestions for projects or experiences that would impress this company"],
