@@ -28,7 +28,7 @@ NextCV is an intelligent career optimization platform that helps job seekers enh
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/nextcv.git
+git clone https://github.com/wjunwei2001/nextcv.git
 cd nextcv
 ```
 
@@ -96,10 +96,6 @@ http://localhost:8501
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Acknowledgments
 
